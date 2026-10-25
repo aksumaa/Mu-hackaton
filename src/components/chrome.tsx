@@ -171,6 +171,35 @@ export function SectionNav({ label, items }: { label: string; items: { href: str
   );
 }
 
+export function LocaleLinks({ locale }: { locale: string }) {
+  const path = usePathname();
+  const t = useTranslations();
+  const locales = [
+    { code: "uz", label: "UZ" },
+    { code: "ru", label: "RU" },
+    { code: "en", label: "EN" },
+  ] as const;
+  return (
+    <div className="flex gap-1" role="group" aria-label={t("common.language")}>
+      {locales.map((item) => (
+        <Link
+          key={item.code}
+          href={path || "/"}
+          locale={item.code}
+          hrefLang={item.code}
+          aria-current={locale === item.code ? "page" : undefined}
+          className={cn(
+            "grid h-11 w-11 place-items-center rounded-full text-xs font-bold",
+            locale === item.code ? "bg-accent text-accent-foreground" : "border border-border text-muted",
+          )}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 export function Countdown({ iso, label }: { iso: string; label: string }) {
   const t = useTranslations("hero");
   const [now, setNow] = useState<number | null>(null);

@@ -540,6 +540,56 @@ export async function addAnnouncement(_prev: ActionState, formData: FormData): P
   return { ok: true };
 }
 
+export async function saveJudgeProfile(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const locale = localeOf(formData);
+  const admin = await requireRoles(locale, ["ADMIN"]);
+  const displayName = text(formData, "displayName").trim();
+  const title = text(formData, "title").trim();
+  const organization = text(formData, "organization").trim();
+  const photoUrl = text(formData, "photoUrl").trim();
+  const bio = text(formData, "bio").trim();
+  const order = Number(text(formData, "order") || "0");
+  if (displayName.length < 2 || title.length < 2 || organization.length < 2) return { error: "invalid_field", field: "displayName" };
+  if (!Number.isInteger(order) || order < 0 || order > 999) return { error: "invalid_field", field: "order" };
+  if (photoUrl && !/^https:\/\/\S+$/.test(photoUrl)) return { error: "invalid_field", field: "photoUrl" };
+  const id = text(formData, "id");
+  const data = {
+    displayName,
+    title,
+    organization,
+    photoUrl: photoUrl || null,
+    bio,
+    order,
+    isPublished: checked(formData, "isPublished"),
+  };
+  try {
+    const row = id
+      ? await prisma.judgeProfile.update({ where: { id }, data })
+      : await prisma.judgeProfile.create({ data });
+    await audit({
+      actorId: admin.id,
+      action: id ? "judge_profile_updated" : "judge_profile_created",
+      entity: "JudgeProfile",
+      entityId: row.id,
+    });
+  } catch {
+    return { error: "invalid_field", field: "displayName" };
+  }
+  refresh(locale);
+  return { ok: true };
+}
+
+export async function deleteJudgeProfile(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const locale = localeOf(formData);
+  const admin = await requireRoles(locale, ["ADMIN"]);
+  const id = text(formData, "id");
+  if (!id) return { error: "invalid_field" };
+  await prisma.judgeProfile.delete({ where: { id } }).catch(() => null);
+  await audit({ actorId: admin.id, action: "judge_profile_deleted", entity: "JudgeProfile", entityId: id });
+  refresh(locale);
+  return { ok: true };
+}
+
 export async function uploadTemplate(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const locale = localeOf(formData);
   const admin = await requireRoles(locale, ["ADMIN"]);

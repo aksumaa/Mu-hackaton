@@ -8,7 +8,7 @@ export default async function AdminLayout({ children, params }: { children: Reac
   setRequestLocale(locale);
   await requireRoles(locale, ["ADMIN"]);
   const t = await getTranslations("admin");
-  const items = ["overview", "stages", "users", "roster", "submissions", "assignments", "ranking", "content", "settings", "audit"] as const;
+  const items = ["overview", "stages", "users", "roster", "submissions", "assignments", "ranking", "content", "jury", "settings", "audit"] as const;
   const hrefs: Record<(typeof items)[number], string> = {
     overview: "/admin",
     stages: "/admin/stages",
@@ -18,6 +18,7 @@ export default async function AdminLayout({ children, params }: { children: Reac
     assignments: "/admin/assignments",
     ranking: "/admin/ranking",
     content: "/admin/content",
+    jury: "/admin/jury",
     settings: "/admin/settings",
     audit: "/admin/audit",
   };

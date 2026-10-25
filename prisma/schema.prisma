@@ -350,6 +350,20 @@ model Announcement {
   createdAt   DateTime  @default(now())
 }
 
+model JudgeProfile {
+  id           String   @id @default(cuid())
+  displayName  String
+  title        String
+  organization String
+  photoUrl     String?
+  bio          String   @default("")
+  order        Int      @default(0)
+  isPublished  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  @@index([isPublished, order])
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actorId   String?
