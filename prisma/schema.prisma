@@ -1,0 +1,374 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PARTICIPANT
+  JUDGE
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum StageKey {
+  STAGE1
+  STAGE2
+  FINAL
+}
+
+enum StageStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  EVALUATING
+  PUBLISHED
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  UPDATED
+  LOCKED
+}
+
+enum FileKind {
+  PRD_PDF
+  PITCH_DECK
+  VIDEO_FILE
+  EQUIVALENT_PROOF
+  OTHER
+}
+
+enum LinkKind {
+  PRODUCT
+  GITHUB
+  VIDEO
+  OTHER
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  studentId          String    @unique
+  fullName           String
+  role               Role      @default(PARTICIPANT)
+  passwordHash       String
+  phone              String?
+  telegram           String?
+  telegramChatId     String?
+  email              String?
+  locale             String    @default("uz")
+  facultyId          String?
+  faculty            Faculty?  @relation(fields: [facultyId], references: [id])
+  course             Int?
+  groupName          String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  ledTeam            Team?     @relation("TeamLeader")
+  assignments        JudgeAssignment[] @relation("JudgeAssignments")
+  assignedBy         JudgeAssignment[] @relation("AssignedBy")
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  resetTokens        PasswordResetToken[]
+
+  @@index([role])
+  @@index([email])
+}
+
+model Faculty {
+  id        String        @id @default(cuid())
+  nameUz    String
+  nameRu    String
+  nameEn    String
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  users     User[]
+  members   TeamMember[]
+  roster    RosterEntry[]
+}
+
+model RosterEntry {
+  id        String   @id @default(cuid())
+  studentId String   @unique
+  fullName  String
+  facultyId String
+  faculty   Faculty  @relation(fields: [facultyId], references: [id])
+  groupName String
+  createdAt DateTime @default(now())
+
+  @@index([facultyId, groupName])
+}
+
+model Team {
+  id                   String       @id @default(cuid())
+  leaderId             String       @unique
+  leader               User         @relation("TeamLeader", fields: [leaderId], references: [id])
+  name                 String?
+  eligibilityOverride  Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  members              TeamMember[]
+  project              Project?
+}
+
+model TeamMember {
+  id                 String             @id @default(cuid())
+  teamId             String
+  team               Team               @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  fullName           String
+  studentId          String             @unique
+  facultyId          String
+  faculty            Faculty            @relation(fields: [facultyId], references: [id])
+  course             Int
+  groupName          String
+  verificationStatus VerificationStatus @default(PENDING)
+  isLeader           Boolean            @default(false)
+  rejectionNote      String?
+  createdAt          DateTime           @default(now())
+
+  @@index([teamId])
+  @@index([verificationStatus])
+}
+
+model Track {
+  id        String    @id @default(cuid())
+  slug      String    @unique
+  nameUz    String
+  nameRu    String
+  nameEn    String
+  descUz    String
+  descRu    String
+  descEn    String
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  projects  Project[]
+}
+
+model Stage {
+  id                   String      @id @default(cuid())
+  key                  StageKey    @unique
+  titleUz              String
+  titleRu              String
+  titleEn              String
+  opensAt              DateTime
+  deadlineAt           DateTime
+  updateDeadlineAt     DateTime
+  resultsPublishedAt   DateTime?
+  status               StageStatus @default(DRAFT)
+  revealScoresToJudges Boolean     @default(false)
+  criteria             Criterion[]
+}
+
+model Project {
+  id          String       @id @default(cuid())
+  teamId      String       @unique
+  team        Team         @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  trackId     String
+  track       Track        @relation(fields: [trackId], references: [id])
+  title       String       @default("")
+  createdAt   DateTime     @default(now())
+  submissions Submission[]
+
+  @@index([trackId])
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  projectId        String
+  project          Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  stageKey         StageKey
+  status           SubmissionStatus @default(DRAFT)
+  firstSubmittedAt DateTime?
+  updatedAt        DateTime         @updatedAt
+  updateUsedAt     DateTime?
+  payload          Json             @default("{}")
+  files            SubmissionFile[]
+  links            SubmissionLink[]
+  assignments      JudgeAssignment[]
+  results          StageResult[]
+
+  @@unique([projectId, stageKey])
+  @@index([stageKey, status])
+}
+
+model SubmissionFile {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  kind         FileKind
+  storageKey   String     @unique
+  originalName String
+  size         Int
+  mime         String
+  isCurrent    Boolean    @default(true)
+  pending      Boolean    @default(false)
+  uploadedAt   DateTime   @default(now())
+
+  @@index([submissionId, kind, isCurrent])
+}
+
+model SubmissionLink {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  kind         LinkKind
+  url          String
+  isCurrent    Boolean    @default(true)
+  pending      Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@index([submissionId, kind])
+}
+
+model Criterion {
+  id        String            @id @default(cuid())
+  stageKey  StageKey
+  stage     Stage             @relation(fields: [stageKey], references: [key])
+  order     Int
+  key       String
+  titleUz   String
+  titleRu   String
+  titleEn   String
+  descUz    String
+  descRu    String
+  descEn    String
+  maxPoints Int
+  scores    EvaluationScore[]
+
+  @@unique([stageKey, key])
+  @@unique([stageKey, order])
+}
+
+model JudgeAssignment {
+  id               String           @id @default(cuid())
+  judgeId          String
+  judge            User             @relation("JudgeAssignments", fields: [judgeId], references: [id])
+  submissionId     String
+  submission       Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  assignedById     String?
+  assignedBy       User?            @relation("AssignedBy", fields: [assignedById], references: [id])
+  status           AssignmentStatus @default(PENDING)
+  conflictDeclared Boolean          @default(false)
+  conflictNote     String?
+  createdAt        DateTime         @default(now())
+  evaluation       Evaluation?
+
+  @@unique([judgeId, submissionId])
+  @@index([submissionId])
+  @@index([judgeId])
+}
+
+model Evaluation {
+  id            String            @id @default(cuid())
+  assignmentId  String            @unique
+  assignment    JudgeAssignment   @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  finalizedAt   DateTime?
+  strengths     String[]
+  improvements  String[]
+  nextSteps     String            @default("")
+  publicComment String            @default("")
+  internalNote  String            @default("")
+  scores        EvaluationScore[]
+  updatedAt     DateTime          @updatedAt
+}
+
+model EvaluationScore {
+  id           String     @id @default(cuid())
+  evaluationId String
+  evaluation   Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterionId  String
+  criterion    Criterion  @relation(fields: [criterionId], references: [id])
+  points       Int
+
+  @@unique([evaluationId, criterionId])
+}
+
+model StageResult {
+  id              String     @id @default(cuid())
+  submissionId    String
+  submission      Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  stageKey        StageKey
+  avgTotal        Float
+  rank            Int
+  advanced        Boolean    @default(false)
+  needsThirdJudge Boolean    @default(false)
+  tieBreakNote    String?
+  tieUnresolved   Boolean    @default(false)
+  snapshot        Json
+  computedAt      DateTime   @default(now())
+
+  @@unique([submissionId, stageKey])
+  @@index([stageKey, rank])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  titleKey  String
+  payload   Json
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  titleUz     String
+  titleRu     String
+  titleEn     String
+  bodyUz      String
+  bodyRu      String
+  bodyEn      String
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String?
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([actorId])
+}
+
+model AppSetting {
+  key   String @id
+  value Json
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
