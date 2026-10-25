@@ -16,10 +16,19 @@ export function canAccessAdmin(actor: Actor | null) {
   return Boolean(actor?.isActive && actor.role === "ADMIN");
 }
 
-export function canReadTeam(actor: Actor, team: { leaderId: string }) {
+export function canReadTeam(actor: Actor, team: { leaderId: string; memberIds?: string[] }) {
   if (!actor.isActive) return false;
   if (actor.role === "ADMIN") return true;
-  return actor.role === "PARTICIPANT" && actor.id === team.leaderId;
+  if (actor.role !== "PARTICIPANT") return false;
+  return actor.id === team.leaderId || Boolean(team.memberIds?.includes(actor.id));
+}
+
+export function canSubmitTeam(actor: Actor, team: { leaderId: string }) {
+  return actor.isActive && actor.role === "PARTICIPANT" && actor.id === team.leaderId;
+}
+
+export function canResetMemberPassword(actor: Actor, team: { leaderId: string }) {
+  return canSubmitTeam(actor, team);
 }
 
 export function canReadJudgeScore(
@@ -34,8 +43,9 @@ export function canReadJudgeScore(
   return stage.status === "PUBLISHED" || stage.revealScoresToJudges;
 }
 
-export function canReadParticipantResults(actor: Actor, leaderId: string, stageStatus: string) {
-  return actor.isActive && actor.role === "PARTICIPANT" && actor.id === leaderId && stageStatus === "PUBLISHED";
+export function canReadParticipantResults(actor: Actor, team: { leaderId: string; memberIds?: string[] }, stageStatus: string) {
+  if (!actor.isActive || actor.role !== "PARTICIPANT" || stageStatus !== "PUBLISHED") return false;
+  return actor.id === team.leaderId || Boolean(team.memberIds?.includes(actor.id));
 }
 
 export function canScoreSubmission(input: {

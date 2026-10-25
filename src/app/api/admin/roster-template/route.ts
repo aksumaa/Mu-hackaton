@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const user = await currentUser();
   if (!user || user.role !== "ADMIN") return new Response(null, { status: 404 });
-  const body = "studentId,fullName,faculty,group\nMU-0001,Full Name,Information Technology,IT-23-01\n";
+  const body = "studentId,fullName,faculty,group\nMU-0001,Full Name,School of IT,IT-23-01\n";
   return new Response(body, {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

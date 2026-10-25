@@ -177,7 +177,7 @@ export async function importRoster(_prev: ActionState, formData: FormData): Prom
     group: header.indexOf("group"),
   };
   if (Object.values(index).some((value) => value < 0)) return { error: "roster_empty" };
-  const faculties = await prisma.faculty.findMany();
+  const faculties = await prisma.faculty.findMany({ where: { isActive: true } });
   let imported = 0;
   const skipped: string[] = [];
   for (const line of lines.slice(1)) {

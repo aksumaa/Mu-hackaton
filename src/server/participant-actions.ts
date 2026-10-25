@@ -1,10 +1,12 @@
 "use server";
 
+import argon2 from "argon2";
 import { Prisma, type FileKind, type StageKey } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { audit } from "@/lib/audit";
 import { CHECKLIST_KEYS } from "@/lib/catalog";
 import { evaluateWrite, interpretSubmit, type WriteIntent } from "@/lib/deadlines";
+import { canResetMemberPassword, canSubmitTeam } from "@/lib/guards";
 import { extensionAllowed, matchesKind } from "@/lib/file-magic";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
@@ -12,17 +14,30 @@ import { deleteObject, newStorageKey, putObject } from "@/lib/storage";
 import { requireUser } from "@/lib/session";
 import { normalizeGroup, safeHttpUrl } from "@/lib/utils";
 import { scanFile } from "@/lib/virus-scan";
-import { memberSchema, stage1DraftSchema, stage1Schema, stage2Schema } from "@/lib/validation";
+import { memberAccountSchema, stage1DraftSchema, stage1Schema, stage2Schema } from "@/lib/validation";
 import { checked, localeOf, text, type ActionState } from "@/server/action-state";
+
+const teamInclude = {
+  members: true,
+  project: { include: { submissions: { include: { files: true, links: true, results: true } } } },
+} as const;
 
 async function leaderTeam(userId: string) {
   return prisma.team.findUnique({
     where: { leaderId: userId },
-    include: {
-      members: true,
-      project: { include: { submissions: { include: { files: true, links: true, results: true } } } },
-    },
+    include: teamInclude,
   });
+}
+
+async function participantTeam(userId: string) {
+  return prisma.team.findFirst({
+    where: { OR: [{ leaderId: userId }, { members: { some: { userId } } }] },
+    include: teamInclude,
+  });
+}
+
+function actorOf(user: { id: string; role: "PARTICIPANT" | "JUDGE" | "ADMIN"; isActive: boolean }) {
+  return { id: user.id, role: user.role, isActive: user.isActive };
 }
 
 function stage1Fields(form: FormData) {
@@ -64,8 +79,9 @@ async function writeStage1(formData: FormData, intent: WriteIntent): Promise<Act
   const parsed = (intent === "save_draft" ? stage1DraftSchema : stage1Schema).safeParse(fields);
   if (!parsed.success) return { error: "invalid_field", field: String(parsed.error.issues[0]?.path[0] ?? "title") };
   const stage = await openStage("STAGE1");
-  const team = await leaderTeam(user.id);
+  const team = await participantTeam(user.id);
   if (!stage || !team) return { error: "stage_not_open" };
+  if ((intent === "submit" || intent === "update") && !canSubmitTeam(actorOf(user), team)) return { error: "leader_only" };
   const submission = team.project?.submissions.find((item) => item.stageKey === "STAGE1") ?? null;
   const decision = evaluateWrite(new Date(), stage, submission, intent);
   if (intent === "submit") {
@@ -138,7 +154,7 @@ async function writeStage1(formData: FormData, intent: WriteIntent): Promise<Act
 }
 
 function membersEditable(stage: { status: string; deadlineAt: Date } | null, now = new Date()) {
-  return Boolean(stage && stage.status === "OPEN" && now.getTime() <= stage.deadlineAt.getTime());
+  return Boolean(stage && (stage.status === "OPEN" || stage.status === "DRAFT") && now.getTime() <= stage.deadlineAt.getTime());
 }
 
 export async function addMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -150,45 +166,95 @@ export async function addMember(_prev: ActionState, formData: FormData): Promise
     await audit({ actorId: user.id, action: "member_rejected", entity: "Stage", entityId: stage?.id, meta: { code: "deadline_passed" } });
     return { error: "deadline_passed" };
   }
-  const parsed = memberSchema.safeParse({
+  const parsed = memberAccountSchema.safeParse({
     fullName: text(formData, "fullName"),
     studentId: text(formData, "studentId"),
     facultyId: text(formData, "facultyId"),
     course: text(formData, "course"),
     groupName: text(formData, "groupName"),
+    password: text(formData, "password"),
   });
   if (!parsed.success) return { error: "invalid_field", field: String(parsed.error.issues[0]?.path[0] ?? "fullName") };
   const team = await leaderTeam(user.id);
-  if (!team) return { error: "forbidden" };
+  if (!team || !canResetMemberPassword(actorOf(user), team)) return { error: "forbidden" };
   if (team.members.length >= 4) return { error: "team_full" };
+  const takenUser = await prisma.user.findFirst({ where: { studentId: { equals: parsed.data.studentId, mode: "insensitive" } } });
+  const takenMember = await prisma.teamMember.findFirst({ where: { studentId: { equals: parsed.data.studentId, mode: "insensitive" } } });
+  if (takenUser || takenMember) return { error: "student_id_taken", field: "studentId" };
+  const faculty = await prisma.faculty.findFirst({ where: { id: parsed.data.facultyId, isActive: true } });
+  if (!faculty) return { error: "invalid_field", field: "facultyId" };
   const roster = await prisma.rosterEntry.findUnique({ where: { studentId: parsed.data.studentId } });
   const verificationStatus =
     roster && roster.facultyId === parsed.data.facultyId && normalizeGroup(roster.groupName) === normalizeGroup(parsed.data.groupName)
       ? "VERIFIED"
       : "PENDING";
   try {
-    await prisma.teamMember.create({
-      data: { teamId: team.id, ...parsed.data, verificationStatus, isLeader: false },
+    await prisma.user.create({
+      data: {
+        studentId: parsed.data.studentId,
+        fullName: parsed.data.fullName,
+        role: "PARTICIPANT",
+        passwordHash: await argon2.hash(parsed.data.password),
+        facultyId: parsed.data.facultyId,
+        course: parsed.data.course,
+        groupName: parsed.data.groupName,
+        locale,
+        mustChangePassword: true,
+        membership: {
+          create: {
+            teamId: team.id,
+            fullName: parsed.data.fullName,
+            studentId: parsed.data.studentId,
+            facultyId: parsed.data.facultyId,
+            course: parsed.data.course,
+            groupName: parsed.data.groupName,
+            verificationStatus,
+            isLeader: false,
+            teamRole: "TEAM_MEMBER",
+          },
+        },
+      },
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { error: "member_exists", field: "studentId" };
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { error: "student_id_taken", field: "studentId" };
     return { error: "generic" };
   }
+  revalidatePath(`/${locale}/cabinet`, "layout");
+  return { ok: true, access: [{ fullName: parsed.data.fullName, studentId: parsed.data.studentId, password: parsed.data.password }] };
+}
+
+export async function removeMember(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const locale = localeOf(formData);
+  const user = await requireUser(locale);
+  const stage = await openStage("STAGE1");
+  if (user.role !== "PARTICIPANT" || !membersEditable(stage)) return { error: "deadline_passed" };
+  const team = await leaderTeam(user.id);
+  if (!team || !canResetMemberPassword(actorOf(user), team)) return { error: "forbidden" };
+  const memberId = text(formData, "memberId");
+  const member = team.members.find((item) => item.id === memberId && item.teamRole !== "TEAM_LEADER" && !item.isLeader);
+  if (!member) return { error: "not_found" };
+  if (member.userId) await prisma.user.delete({ where: { id: member.userId } });
+  else await prisma.teamMember.delete({ where: { id: member.id } });
   revalidatePath(`/${locale}/cabinet`, "layout");
   return { ok: true };
 }
 
-export async function removeMember(formData: FormData): Promise<void> {
+export async function resetMemberPassword(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const locale = localeOf(formData);
   const user = await requireUser(locale);
-  const stage = await openStage("STAGE1");
-  if (user.role !== "PARTICIPANT" || !membersEditable(stage)) return;
   const team = await leaderTeam(user.id);
-  const memberId = text(formData, "memberId");
-  const member = team?.members.find((item) => item.id === memberId && !item.isLeader);
-  if (!member) return;
-  await prisma.teamMember.delete({ where: { id: member.id } });
-  revalidatePath(`/${locale}/cabinet`, "layout");
+  if (!team || !canResetMemberPassword(actorOf(user), team)) return { error: "forbidden" };
+  const password = text(formData, "password");
+  if (password.length < 8 || password.length > 128) return { error: "invalid_field", field: "password" };
+  const member = team.members.find((item) => item.id === text(formData, "memberId") && item.teamRole === "TEAM_MEMBER" && item.userId);
+  if (!member?.userId) return { error: "not_found" };
+  await prisma.user.update({
+    where: { id: member.userId },
+    data: { passwordHash: await argon2.hash(password), mustChangePassword: true },
+  });
+  await audit({ actorId: user.id, action: "member_password_reset", entity: "User", entityId: member.userId });
+  revalidatePath(`/${locale}/cabinet/team`);
+  return { ok: true, access: [{ fullName: member.fullName, studentId: member.studentId, password }] };
 }
 
 function stage2Fields(form: FormData) {
@@ -209,10 +275,8 @@ function stage2Fields(form: FormData) {
 }
 
 async function stage2Allowed(userId: string) {
-  const stage1 = await prisma.submission.findFirst({
-    where: { stageKey: "STAGE1", project: { team: { leaderId: userId } } },
-    include: { results: true },
-  });
+  const team = await participantTeam(userId);
+  const stage1 = team?.project?.submissions.find((item) => item.stageKey === "STAGE1");
   return Boolean(stage1?.results.some((result) => result.stageKey === "STAGE1" && result.advanced));
 }
 
@@ -264,7 +328,7 @@ export async function uploadStage2File(_prev: ActionState, formData: FormData): 
   if (user.role !== "PARTICIPANT") return { error: "forbidden" };
   if (!(await stage2Allowed(user.id))) return { error: "stage2_closed" };
   const stage = await openStage("STAGE2");
-  const team = await leaderTeam(user.id);
+  const team = await participantTeam(user.id);
   const submission = team?.project?.submissions.find((item) => item.stageKey === "STAGE2") ?? null;
   if (!stage || !submission) return { error: "stage_not_open" };
   const decision = evaluateWrite(new Date(), stage, submission, "save_draft");
@@ -322,8 +386,9 @@ async function writeStage2(formData: FormData, intent: WriteIntent): Promise<Act
   if (user.role !== "PARTICIPANT") return { error: "forbidden" };
   if (!(await stage2Allowed(user.id))) return { error: "stage2_closed" };
   const stage = await openStage("STAGE2");
-  const team = await leaderTeam(user.id);
+  const team = await participantTeam(user.id);
   if (!stage || !team?.project) return { error: "stage_not_open" };
+  if ((intent === "submit" || intent === "update") && !canSubmitTeam(actorOf(user), team)) return { error: "leader_only" };
   const existing = team.project.submissions.find((item) => item.stageKey === "STAGE2") ?? null;
   const decision = evaluateWrite(new Date(), stage, existing, intent);
   if (intent === "submit") {

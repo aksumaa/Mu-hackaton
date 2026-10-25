@@ -4,9 +4,9 @@ import { Link } from "@/i18n/navigation";
 import { tr } from "@/lib/locale-text";
 import { prisma } from "@/lib/prisma";
 import { requireRoles } from "@/lib/session";
-import { addMember, removeMember } from "@/server/participant-actions";
+import { addMember } from "@/server/participant-actions";
 import { loadCabinet } from "@/server/cabinet";
-import { TeamForm } from "@/components/team-form";
+import { MemberControls, TeamForm } from "@/components/team-form";
 
 export default async function TeamPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -19,7 +19,8 @@ export default async function TeamPage({ params }: { params: Promise<{ locale: s
     prisma.stage.findUnique({ where: { key: "STAGE1" } }),
   ]);
   if (!team) return <Empty>{t("cabinet.noTeam")}</Empty>;
-  const open = Boolean(stage && stage.status === "OPEN" && Date.now() <= stage.deadlineAt.getTime());
+  const leader = team.leaderId === user.id;
+  const open = Boolean(stage && (stage.status === "OPEN" || stage.status === "DRAFT") && Date.now() <= stage.deadlineAt.getTime());
   return (
     <div className="grid gap-4">
       <h1 className="text-3xl font-semibold">{t("cabinet.team")}</h1>
@@ -29,7 +30,7 @@ export default async function TeamPage({ params }: { params: Promise<{ locale: s
             <Card>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="break-words font-semibold">{member.fullName} {member.isLeader ? `· ${t("cabinet.leader")}` : ""}</p>
+                  <p className="break-words font-semibold">{member.fullName} · {member.teamRole === "TEAM_LEADER" ? t("cabinet.leader") : t("cabinet.memberRole")}</p>
                   <p className="text-sm text-muted">{member.studentId} · {tr(locale, member.faculty.nameUz, member.faculty.nameRu, member.faculty.nameEn)} · {member.groupName}</p>
                   {member.rejectionNote ? <p className="mt-2 break-words text-sm text-danger">{member.rejectionNote}</p> : null}
                 </div>
@@ -39,18 +40,12 @@ export default async function TeamPage({ params }: { params: Promise<{ locale: s
               </div>
               {member.verificationStatus === "REJECTED" ? <p className="mt-3 text-sm">{t("cabinet.rejected")}</p> : null}
               {member.verificationStatus === "PENDING" ? <p className="mt-3 text-sm text-muted">{t("cabinet.pending")}</p> : null}
-              {!member.isLeader && open ? (
-                <form action={removeMember} className="mt-3">
-                  <input type="hidden" name="locale" value={locale} />
-                  <input type="hidden" name="memberId" value={member.id} />
-                  <button type="submit" className="min-h-11 rounded-full border border-border px-4 text-sm font-semibold">{t("common.remove")}</button>
-                </form>
-              ) : null}
+              {leader && member.teamRole !== "TEAM_LEADER" ? <MemberControls locale={locale} memberId={member.id} open={open} /> : null}
             </Card>
           </li>
         ))}
       </ul>
-      {open && team.members.length < 4 ? (
+      {leader && open && team.members.length < 4 ? (
         <Card>
           <h2 className="font-semibold">{t("cabinet.addMember")}</h2>
           <TeamForm locale={locale} action={addMember} faculties={faculties.map((faculty) => ({ id: faculty.id, name: tr(locale, faculty.nameUz, faculty.nameRu, faculty.nameEn) }))} />

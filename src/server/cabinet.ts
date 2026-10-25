@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 
 export function loadCabinet(userId: string) {
-  return prisma.team.findUnique({
-    where: { leaderId: userId },
+  return prisma.team.findFirst({
+    where: { OR: [{ leaderId: userId }, { members: { some: { userId } } }] },
     include: {
       members: { include: { faculty: true }, orderBy: { createdAt: "asc" } },
       project: {

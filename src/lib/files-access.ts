@@ -1,14 +1,15 @@
-import type { Actor } from "@/lib/guards";
+import { canReadTeam, type Actor } from "@/lib/guards";
 
 export function canAccessStoredFile(input: {
   actor: Actor | null;
   ownerId: string;
+  memberIds?: string[];
   submissionStatus: "DRAFT" | "SUBMITTED" | "UPDATED" | "LOCKED";
 }) {
   const actor = input.actor;
   if (!actor?.isActive) return false;
   if (actor.role === "ADMIN") return true;
-  if (actor.role === "PARTICIPANT") return actor.id === input.ownerId;
+  if (actor.role === "PARTICIPANT") return canReadTeam(actor, { leaderId: input.ownerId, memberIds: input.memberIds });
   if (actor.role === "JUDGE") return input.submissionStatus !== "DRAFT";
   return false;
 }

@@ -8,6 +8,7 @@ import { HeaderBar } from "@/components/chrome";
 import { Logo } from "@/components/logo";
 import { Providers } from "@/components/providers";
 import { Link } from "@/i18n/navigation";
+import { SOCIALS } from "@/config/university";
 import { isLocale, routing, type Locale } from "@/i18n/routing";
 import { homeFor } from "@/lib/locale-text";
 import { prisma } from "@/lib/prisma";
@@ -112,6 +113,9 @@ export default async function LocaleLayout({
                 <Link href="/criteria" className="underline-offset-4 hover:underline">{t("nav.criteria")}</Link>
               </div>
               <div className="grid content-start gap-2 text-sm">
+                {SOCIALS.website ? <a className="underline-offset-4 hover:underline" href={SOCIALS.website}>{t("footer.website")}</a> : null}
+                {SOCIALS.telegram ? <a className="underline-offset-4 hover:underline" href={SOCIALS.telegram}>{t("footer.telegram")}</a> : null}
+                {SOCIALS.instagram ? <a className="underline-offset-4 hover:underline" href={SOCIALS.instagram}>{t("footer.instagram")}</a> : null}
                 <Link href="/contacts" className="underline-offset-4 hover:underline">{t("nav.contact")}</Link>
                 <Link href="/faq" className="underline-offset-4 hover:underline">{t("nav.faq")}</Link>
                 <p className="text-muted">{t("footer.rights")}</p>

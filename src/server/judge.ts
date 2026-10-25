@@ -145,9 +145,14 @@ export async function storeSubmissionFile(input: {
 }): Promise<ActionResult<{ fileId: string }>> {
   if (input.role !== "PARTICIPANT") return { ok: false, code: "forbidden" };
   const submission = await prisma.submission.findFirst({
-    where: { id: input.submissionId, project: { team: { leaderId: input.userId } } },
+    where: {
+      id: input.submissionId,
+      project: { team: { OR: [{ leaderId: input.userId }, { members: { some: { userId: input.userId } } }] } },
+    },
+    include: { project: { select: { team: { select: { leaderId: true } } } } },
   });
   if (!submission) return { ok: false, code: "not_found" };
+  if (submission.status !== "DRAFT" && submission.project.team.leaderId !== input.userId) return { ok: false, code: "leader_only" };
   const stage = await prisma.stage.findUnique({ where: { key: submission.stageKey } });
   if (!stage) return { ok: false, code: "not_found" };
   const intent = submission.status === "DRAFT" ? "save_draft" : "update";

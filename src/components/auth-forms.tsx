@@ -59,12 +59,13 @@ function PasswordField({
   );
 }
 
-export function LoginForm({ locale }: { locale: string }) {
+export function LoginForm({ locale, next = "" }: { locale: string; next?: string }) {
   const t = useTranslations("auth");
   const [state, action, pending] = useActionState(loginAction, null);
   return (
     <form action={action} className="grid gap-4">
       <input type="hidden" name="locale" value={locale} />
+      <input type="hidden" name="next" value={next} />
       <FormMessage state={state} />
       <Field id="studentId" label={t("id")} hint={t("staffHint")} error={state?.field === "studentId" ? undefined : undefined}>
         <TextInput id="studentId" name="studentId" autoComplete="username" required minLength={4} />

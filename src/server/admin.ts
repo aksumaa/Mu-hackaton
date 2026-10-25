@@ -135,7 +135,7 @@ export function parseRoster(text: string) {
 }
 
 export async function importRoster(actorId: string, text: string, commit: boolean): Promise<ActionResult<{ imported: number; errors: { line: number; code: string }[] }>> {
-  const faculties = await prisma.faculty.findMany();
+  const faculties = await prisma.faculty.findMany({ where: { isActive: true } });
   const parsed = parseRoster(text);
   const errors: { line: number; code: string }[] = [];
   const seen = new Set<string>();

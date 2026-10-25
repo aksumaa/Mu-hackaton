@@ -37,11 +37,13 @@ export function Stage1Form({
   tracks,
   initial,
   mode,
+  canLead = true,
 }: {
   locale: string;
   tracks: { id: string; name: string }[];
   initial: Stage1Values;
   mode: "draft" | "update" | "locked";
+  canLead?: boolean;
 }) {
   const t = useTranslations("cabinet");
   const common = useTranslations("common");
@@ -66,7 +68,8 @@ export function Stage1Form({
     return () => window.clearTimeout(timer);
   }, [values, mode]);
 
-  const action = mode === "draft" ? save[1] : mode === "update" ? update[1] : undefined;
+  const action = mode === "draft" ? save[1] : mode === "update" && canLead ? update[1] : undefined;
+  const lockedForMember = !canLead && mode !== "draft";
   const active = mode === "draft" ? save[0] : mode === "update" ? update[0] : submit[0];
   const busy = mode === "draft" ? save[2] : mode === "update" ? update[2] : submit[2];
 
@@ -86,10 +89,10 @@ export function Stage1Form({
       <FormMessage state={state ?? active} />
       {pending ? <p className="text-sm text-muted">{common("saving")}</p> : null}
       <Field id="title" label={t("titleField")} hint={`${values.title.length}/${limits.title}`}>
-        <TextInput id="title" name="title" required={mode !== "draft"} maxLength={limits.title} disabled={mode === "locked"} {...bind("title")} />
+        <TextInput id="title" name="title" required={mode !== "draft"} maxLength={limits.title} disabled={mode === "locked" || lockedForMember} {...bind("title")} />
       </Field>
       <Field id="trackId" label={t("track")}>
-        <SelectInput id="trackId" name="trackId" disabled={mode === "locked"} value={values.trackId} onChange={bind("trackId").onChange}>
+        <SelectInput id="trackId" name="trackId" disabled={mode === "locked" || lockedForMember} value={values.trackId} onChange={bind("trackId").onChange}>
           {tracks.map((track) => (
             <option key={track.id} value={track.id}>{track.name}</option>
           ))}
@@ -97,7 +100,7 @@ export function Stage1Form({
       </Field>
       {(["shortDescription", "problem", "audience", "solution", "differentiation", "validation", "teamRoles"] as const).map((key) => (
         <Field key={key} id={key} label={t(key === "shortDescription" ? "short" : key === "differentiation" ? "difference" : key === "teamRoles" ? "roles" : key)} hint={`${values[key].length}/${limits[key]}`}>
-          <TextArea id={key} name={key} maxLength={limits[key]} disabled={mode === "locked"} {...bind(key)} />
+          <TextArea id={key} name={key} maxLength={limits[key]} disabled={mode === "locked" || lockedForMember} {...bind(key)} />
         </Field>
       ))}
       <label className="flex items-start gap-3 text-sm leading-6">
@@ -106,7 +109,7 @@ export function Stage1Form({
           name="consent"
           className="mt-1 h-5 w-5"
           checked={values.consent}
-          disabled={mode === "locked"}
+          disabled={mode === "locked" || lockedForMember}
           onChange={(event) => setValues((current) => ({ ...current, consent: event.target.checked }))}
         />
         <span>{t("consent")}</span>
@@ -114,12 +117,13 @@ export function Stage1Form({
       {mode === "draft" ? (
         <div className="flex flex-col gap-2 sm:flex-row">
           <Button type="submit" formAction={save[1]} disabled={busy || pending}>{busy ? common("saving") : t("saveDraft")}</Button>
-          <Button type="submit" formAction={submit[1]} disabled={busy}>{busy ? common("submitting") : t("submitApplication")}</Button>
+          {canLead ? <Button type="submit" formAction={submit[1]} disabled={busy}>{busy ? common("submitting") : t("submitApplication")}</Button> : <p className="text-sm font-semibold">{t("leaderOnly")}</p>}
         </div>
       ) : null}
-      {mode === "update" ? (
+      {mode === "update" && canLead ? (
         <Button type="submit" formAction={update[1]} disabled={busy}>{busy ? common("updating") : t("updateApplication")}</Button>
       ) : null}
+      {mode === "update" && !canLead ? <p className="text-sm font-semibold">{t("leaderOnly")}</p> : null}
       {mode === "locked" ? <p className="text-sm text-muted">{t("lockedMessage")}</p> : null}
       <p className="text-sm text-muted">{t("draftHint")}</p>
     </form>
@@ -131,11 +135,13 @@ export function Stage2Form({
   mode,
   initial,
   files,
+  canLead = true,
 }: {
   locale: string;
   mode: "draft" | "update" | "locked";
   initial: Record<string, string | boolean | Record<string, unknown>>;
   files: { kind: string; name: string }[];
+  canLead?: boolean;
 }) {
   const t = useTranslations("cabinet");
   const checklist = useTranslations("checklist");
@@ -144,7 +150,8 @@ export function Stage2Form({
   const submit = useActionState(submitStage2, null);
   const update = useActionState(updateStage2, null);
   const state = mode === "update" ? update[0] : save[0];
-  const action = mode === "update" ? update[1] : save[1];
+  const action = mode === "update" && canLead ? update[1] : mode === "draft" ? save[1] : undefined;
+  const lockedForMember = !canLead && mode !== "draft";
   const pending = mode === "update" ? update[2] : save[2] || submit[2];
   const [uploadState, uploadAction, uploadPending] = useActionState(uploadStage2File, null);
   const checks = (typeof initial.checklist === "object" && initial.checklist ? initial.checklist : {}) as Record<string, boolean>;
@@ -154,30 +161,30 @@ export function Stage2Form({
         <input type="hidden" name="locale" value={locale} />
         <FormMessage state={state} />
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" name="softwareProject" defaultChecked={Boolean(initial.softwareProject)} disabled={mode === "locked"} className="mt-1 h-5 w-5" />
+          <input type="checkbox" name="softwareProject" defaultChecked={Boolean(initial.softwareProject)} disabled={mode === "locked" || lockedForMember} className="mt-1 h-5 w-5" />
           <span>{t("software")}</span>
         </label>
         <Field id="productUrl" label={t("product")}>
-          <TextInput id="productUrl" name="productUrl" type="url" defaultValue={String(initial.productUrl ?? "")} disabled={mode === "locked"} />
+          <TextInput id="productUrl" name="productUrl" type="url" defaultValue={String(initial.productUrl ?? "")} disabled={mode === "locked" || lockedForMember} />
         </Field>
         <Field id="accessInstructions" label={t("access")}>
-          <TextArea id="accessInstructions" name="accessInstructions" defaultValue={String(initial.accessInstructions ?? "")} disabled={mode === "locked"} />
+          <TextArea id="accessInstructions" name="accessInstructions" defaultValue={String(initial.accessInstructions ?? "")} disabled={mode === "locked" || lockedForMember} />
         </Field>
         <Field id="videoUrl" label={t("video")} hint={t("videoHint")}>
-          <TextInput id="videoUrl" name="videoUrl" type="url" defaultValue={String(initial.videoUrl ?? "")} disabled={mode === "locked"} />
+          <TextInput id="videoUrl" name="videoUrl" type="url" defaultValue={String(initial.videoUrl ?? "")} disabled={mode === "locked" || lockedForMember} />
         </Field>
         <Field id="githubUrl" label={t("github")}>
-          <TextInput id="githubUrl" name="githubUrl" type="url" defaultValue={String(initial.githubUrl ?? "")} disabled={mode === "locked"} />
+          <TextInput id="githubUrl" name="githubUrl" type="url" defaultValue={String(initial.githubUrl ?? "")} disabled={mode === "locked" || lockedForMember} />
         </Field>
         <Field id="equivalentProof" label={t("equivalent")}>
-          <TextArea id="equivalentProof" name="equivalentProof" defaultValue={String(initial.equivalentProof ?? "")} disabled={mode === "locked"} />
+          <TextArea id="equivalentProof" name="equivalentProof" defaultValue={String(initial.equivalentProof ?? "")} disabled={mode === "locked" || lockedForMember} />
         </Field>
         {(["priorWork", "aiTools", "openSource", "limitations"] as const).map((key) => (
           <Field key={key} id={key} label={t(key === "limitations" ? "knownLimitations" : key)}>
-            <TextArea id={key} name={key} defaultValue={String(initial[key] ?? "")} disabled={mode === "locked"} />
+            <TextArea id={key} name={key} defaultValue={String(initial[key] ?? "")} disabled={mode === "locked" || lockedForMember} />
           </Field>
         ))}
-        {mode !== "locked" ? (
+        {mode !== "locked" && !lockedForMember ? (
           <div className="grid gap-3">
             {(["PRD_PDF", "PITCH_DECK", "VIDEO_FILE", "EQUIVALENT_PROOF"] as const).map((kind) => (
               <Field key={kind} id={`file_${kind}`} label={kind} hint={files.find((file) => file.kind === kind)?.name}>
@@ -186,7 +193,7 @@ export function Stage2Form({
             ))}
           </div>
         ) : null}
-        <fieldset className="grid gap-2" disabled={mode === "locked"}>
+        <fieldset className="grid gap-2" disabled={mode === "locked" || lockedForMember}>
           <legend className="text-sm font-semibold">{t("checklistTitle")}</legend>
           {CHECKLIST_KEYS.map((key) => (
             <label key={key} className="flex items-start gap-3 text-sm leading-6">
@@ -198,10 +205,11 @@ export function Stage2Form({
         {mode === "draft" ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button type="submit" formAction={save[1]} disabled={pending}>{pending ? common("saving") : t("saveDraft")}</Button>
-            <Button type="submit" formAction={submit[1]} disabled={pending}>{pending ? common("submitting") : t("submitApplication")}</Button>
+            {canLead ? <Button type="submit" formAction={submit[1]} disabled={pending}>{pending ? common("submitting") : t("submitApplication")}</Button> : <p className="text-sm font-semibold">{t("leaderOnly")}</p>}
           </div>
         ) : null}
-        {mode === "update" ? <Button type="submit" disabled={pending}>{pending ? common("updating") : t("updateApplication")}</Button> : null}
+        {mode === "update" && canLead ? <Button type="submit" disabled={pending}>{pending ? common("updating") : t("updateApplication")}</Button> : null}
+        {mode === "update" && !canLead ? <p className="text-sm font-semibold">{t("leaderOnly")}</p> : null}
         {mode === "locked" ? <p className="text-sm text-muted">{t("lockedMessage")}</p> : null}
       </form>
       {mode === "draft" ? (

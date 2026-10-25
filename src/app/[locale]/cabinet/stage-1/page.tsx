@@ -37,6 +37,7 @@ export default async function Stage1Page({ params }: { params: Promise<{ locale:
         locale={locale}
         mode={mode}
         tracks={tracks.map((track) => ({ id: track.id, name: tr(locale, track.nameUz, track.nameRu, track.nameEn) }))}
+        canLead={team.leaderId === user.id}
         initial={{ ...initial, trackId: team.project?.trackId || tracks[0]!.id }}
       />
     </div>

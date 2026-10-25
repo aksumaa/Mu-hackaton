@@ -14,12 +14,13 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
   const user = await currentUser();
   const file = await prisma.submissionFile.findUnique({
     where: { id },
-    include: { submission: { include: { project: { include: { team: true } } } } },
+    include: { submission: { include: { project: { include: { team: { include: { members: { select: { userId: true } } } } } } } } },
   });
   if (!file) return new Response(null, { status: 404 });
   const allowed = canAccessStoredFile({
     actor: user ? { id: user.id, role: user.role, isActive: user.isActive } : null,
     ownerId: file.submission.project.team.leaderId,
+    memberIds: file.submission.project.team.members.flatMap((member) => member.userId ? [member.userId] : []),
     submissionStatus: file.submission.status,
   });
   if (!allowed) return new Response(null, { status: 404 });

@@ -330,15 +330,6 @@ export const TRACKS = [
   },
 ] as const;
 
-export const FACULTIES = [
-  { uz: "Axborot texnologiyalari", ru: "Информационные технологии", en: "Information Technology" },
-  { uz: "Iqtisodiyot", ru: "Экономика", en: "Economics" },
-  { uz: "Moliya", ru: "Финансы", en: "Finance" },
-  { uz: "Pedagogika", ru: "Педагогика", en: "Pedagogy" },
-  { uz: "Huquqshunoslik", ru: "Юриспруденция", en: "Law" },
-  { uz: "Tibbiyot", ru: "Медицина", en: "Medicine" },
-] as const;
-
 export const CHECKLIST_KEYS = [
   "mvp_opens",
   "video_ready",

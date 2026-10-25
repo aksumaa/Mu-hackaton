@@ -49,8 +49,23 @@ test("anonymous pages, languages, and role redirects", async ({ page }) => {
   await expect(page).toHaveURL(/\/en\/login/);
   for (const path of ["/cabinet", "/judge", "/admin"]) {
     await page.goto(`/en${path}`);
-    await expect(page).toHaveURL(/\/en\/login/);
+    await expect(page).toHaveURL(new RegExp(`/en/login\\?next=%2Fen%2F${path.slice(1)}$`));
   }
+});
+
+test("register, create a team, and open the team dashboard", async ({ page }) => {
+  const studentId = `E2E${Date.now()}`;
+  await page.context().clearCookies();
+  await page.goto("/en/register");
+  await page.locator("#fullName").fill("Play Leader");
+  await page.locator("#studentId").fill(studentId);
+  await page.locator("#groupName").fill("IT-25-09");
+  await page.locator("#phone").fill("+998901110099");
+  await page.locator("#password").fill("Team-pass-1");
+  await page.locator("#acceptRules").check();
+  await page.getByRole("button", { name: "Create the team" }).click();
+  await expect(page).toHaveURL(/\/en\/cabinet$/);
+  await expect(page.getByRole("heading", { name: "Your cabinet" })).toBeVisible();
 });
 
 test("participant, judge, and admin stay inside their roles", async ({ page }) => {

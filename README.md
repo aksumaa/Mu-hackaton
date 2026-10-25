@@ -23,7 +23,7 @@ npm run seed
 npm run dev
 ```
 
-Open http://localhost:3000. The site redirects to `/uz`.
+`npm run dev` always listens on http://localhost:3000. If that port is already taken, Next.js exits instead of switching to another port. Open http://localhost:3000. The site redirects to `/uz`.
 
 Demo accounts from the seed (change them before a public server):
 
@@ -35,6 +35,7 @@ Demo accounts from the seed (change them before a public server):
 | Judge | `MU-JUDGE-3` | `Judge-pass-1` |
 | Participant | `MU-24001` | `Team-pass-1` |
 | Participant with a submitted application | `MU-24002` | `Team-pass-1` |
+| Teammate on the first participant's team | `MU-24011` | `Team-pass-1` |
 
 ## Run a stage
 

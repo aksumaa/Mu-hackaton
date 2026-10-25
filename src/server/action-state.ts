@@ -4,6 +4,7 @@ export type ActionState = {
   field?: string;
   notice?: string;
   password?: string;
+  access?: { fullName: string; studentId: string; password: string }[];
   imported?: number;
   skipped?: string[];
 } | null;

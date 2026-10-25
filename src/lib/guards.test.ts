@@ -4,7 +4,9 @@ import {
   canReadJudgeScore,
   canReadParticipantResults,
   canReadTeam,
+  canResetMemberPassword,
   canScoreSubmission,
+  canSubmitTeam,
 } from "@/lib/guards";
 
 const participant = { id: "p1", role: "PARTICIPANT" as const, isActive: true };
@@ -19,6 +21,16 @@ describe("authorization", () => {
     expect(canReadTeam(other, { leaderId: "p1" })).toBe(false);
     expect(canReadTeam(admin, { leaderId: "p1" })).toBe(true);
     expect(canReadTeam(judge, { leaderId: "p1" })).toBe(false);
+    expect(canReadTeam(other, { leaderId: "p1", memberIds: ["p2"] })).toBe(true);
+    expect(canReadTeam(other, { leaderId: "p9", memberIds: ["p1"] })).toBe(false);
+  });
+
+  it("lets only the leader submit, update, or reset a member password", () => {
+    expect(canSubmitTeam(participant, { leaderId: "p1" })).toBe(true);
+    expect(canSubmitTeam(other, { leaderId: "p1" })).toBe(false);
+    expect(canResetMemberPassword(participant, { leaderId: "p1" })).toBe(true);
+    expect(canResetMemberPassword(participant, { leaderId: "p2" })).toBe(false);
+    expect(canResetMemberPassword(other, { leaderId: "p1" })).toBe(false);
   });
 
   it("hides another judge's scores until publish or an explicit reveal", () => {
@@ -32,9 +44,10 @@ describe("authorization", () => {
   });
 
   it("shows participant results only to the leader after publication", () => {
-    expect(canReadParticipantResults(participant, "p1", "PUBLISHED")).toBe(true);
-    expect(canReadParticipantResults(participant, "p1", "EVALUATING")).toBe(false);
-    expect(canReadParticipantResults(other, "p1", "PUBLISHED")).toBe(false);
+    expect(canReadParticipantResults(participant, { leaderId: "p1" }, "PUBLISHED")).toBe(true);
+    expect(canReadParticipantResults(participant, { leaderId: "p1" }, "EVALUATING")).toBe(false);
+    expect(canReadParticipantResults(other, { leaderId: "p1" }, "PUBLISHED")).toBe(false);
+    expect(canReadParticipantResults(other, { leaderId: "p1", memberIds: ["p2"] }, "PUBLISHED")).toBe(true);
   });
 
   it("scores only assigned judges during evaluation unless the setting allows any judge", () => {

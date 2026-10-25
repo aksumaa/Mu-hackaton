@@ -41,6 +41,10 @@ export const memberSchema = z.object({
   groupName,
 });
 
+export const memberAccountSchema = memberSchema.extend({
+  password,
+});
+
 export const changePasswordSchema = z
   .object({
     currentPassword: z.string().min(1).max(128),

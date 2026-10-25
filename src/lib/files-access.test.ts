@@ -10,6 +10,8 @@ describe("stored files are not public", () => {
   it("denies anonymous users and other teams, including draft files for judges", () => {
     expect(canAccessStoredFile({ actor: null, ownerId: "p1", submissionStatus: "SUBMITTED" })).toBe(false);
     expect(canAccessStoredFile({ actor: other, ownerId: "p1", submissionStatus: "SUBMITTED" })).toBe(false);
+    expect(canAccessStoredFile({ actor: other, ownerId: "p1", memberIds: ["p2"], submissionStatus: "DRAFT" })).toBe(true);
+    expect(canAccessStoredFile({ actor: participant, ownerId: "p9", memberIds: ["p2"], submissionStatus: "SUBMITTED" })).toBe(false);
     expect(canAccessStoredFile({ actor: participant, ownerId: "p1", submissionStatus: "DRAFT" })).toBe(true);
     expect(canAccessStoredFile({ actor: judge, ownerId: "p1", submissionStatus: "DRAFT" })).toBe(false);
     expect(canAccessStoredFile({ actor: judge, ownerId: "p1", submissionStatus: "SUBMITTED" })).toBe(true);

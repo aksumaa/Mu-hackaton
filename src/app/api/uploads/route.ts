@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, code: "invalid_input" }, { status: 400 });
   }
   const owned = await prisma.submission.findFirst({
-    where: { id: submissionId, project: { team: { leaderId: user.id } } },
+    where: { id: submissionId, project: { team: { OR: [{ leaderId: user.id }, { members: { some: { userId: user.id } } }] } } },
     select: { status: true },
   });
   if (!owned || owned.status !== "DRAFT") {

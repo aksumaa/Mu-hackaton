@@ -10,7 +10,7 @@ import { normalizeGroup, safeHttpUrl } from "@/lib/utils";
 import { evaluateWrite, interpretSubmit } from "@/lib/deadlines";
 import { readStage1, readStage2 } from "@/lib/payload";
 import { CHECKLIST_KEYS } from "@/lib/catalog";
-import { memberSchema, registerSchema, stage1DraftSchema, stage1Schema, stage2Schema } from "@/lib/validation";
+import { memberAccountSchema, memberSchema, registerSchema, stage1DraftSchema, stage1Schema, stage2Schema } from "@/lib/validation";
 import type { Stage1Draft, Stage2Input } from "@/lib/validation";
 
 export type ActionResult<T = null> = { ok: true; data: T } | { ok: false; code: string; field?: string };
@@ -38,20 +38,6 @@ export async function teamIsEligible(teamId: string) {
 
 async function stageByKey(key: StageKey) {
   return prisma.stage.findUnique({ where: { key } });
-}
-
-async function leaderContext(userId: string) {
-  return prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      ledTeam: {
-        include: {
-          members: { include: { faculty: true }, orderBy: { createdAt: "asc" } },
-          project: { include: { track: true, submissions: { include: { files: true, links: true } } } },
-        },
-      },
-    },
-  });
 }
 
 export async function registerParticipant(raw: unknown, ip: string): Promise<ActionResult<{ eligible: boolean }>> {
@@ -92,6 +78,7 @@ export async function registerParticipant(raw: unknown, ip: string): Promise<Act
                 groupName: input.groupName,
                 verificationStatus: status,
                 isLeader: true,
+                teamRole: "TEAM_LEADER",
               },
             },
             project: {
@@ -104,6 +91,10 @@ export async function registerParticipant(raw: unknown, ip: string): Promise<Act
           },
         },
       },
+    });
+    await prisma.teamMember.updateMany({
+      where: { team: { leaderId: user.id }, isLeader: true },
+      data: { userId: user.id, teamRole: "TEAM_LEADER" },
     });
     await notifyUser({ userId: user.id, type: "registered", titleKey: "registered", payload: {} });
     await audit({ actorId: user.id, action: "register", entity: "User", entityId: user.id });
@@ -133,28 +124,42 @@ export async function saveTeamName(userId: string, name: string): Promise<Action
   return { ok: true, data: null };
 }
 
-export async function addMember(userId: string, raw: unknown): Promise<ActionResult> {
+export async function addMember(userId: string, raw: unknown): Promise<ActionResult<{ studentId: string; password: string }>> {
   const window = await assertMemberWindow();
   if (!window.ok) return window;
-  const parsed = memberSchema.safeParse(raw);
+  const parsed = memberAccountSchema.safeParse(raw);
   if (!parsed.success) return { ok: false, code: "invalid_input" };
   const team = await prisma.team.findUnique({ where: { leaderId: userId }, include: { members: true } });
   if (!team) return { ok: false, code: "not_found" };
   if (team.members.length >= 4) return { ok: false, code: "team_full" };
   const faculty = await prisma.faculty.findFirst({ where: { id: parsed.data.facultyId, isActive: true } });
   if (!faculty) return { ok: false, code: "invalid_input", field: "facultyId" };
-  const existingUser = await prisma.user.findUnique({ where: { studentId: parsed.data.studentId } });
-  if (existingUser) return { ok: false, code: "student_id_taken", field: "studentId" };
+  const existingUser = await prisma.user.findFirst({ where: { studentId: { equals: parsed.data.studentId, mode: "insensitive" } } });
+  const existingMember = await prisma.teamMember.findFirst({ where: { studentId: { equals: parsed.data.studentId, mode: "insensitive" } } });
+  if (existingUser || existingMember) return { ok: false, code: "student_id_taken", field: "studentId" };
   const status = await verificationFor(parsed.data.studentId, parsed.data.facultyId, parsed.data.groupName);
+  const { password, ...member } = parsed.data;
   try {
-    await prisma.teamMember.create({
-      data: { teamId: team.id, ...parsed.data, verificationStatus: status, isLeader: false },
+    await prisma.user.create({
+      data: {
+        studentId: member.studentId,
+        fullName: member.fullName,
+        role: "PARTICIPANT",
+        passwordHash: await argon2.hash(password),
+        facultyId: member.facultyId,
+        course: member.course,
+        groupName: member.groupName,
+        mustChangePassword: true,
+        membership: {
+          create: { teamId: team.id, ...member, verificationStatus: status, isLeader: false, teamRole: "TEAM_MEMBER" },
+        },
+      },
     });
   } catch (error) {
     if (uniqueCode(error)) return { ok: false, code: "student_id_taken", field: "studentId" };
     throw error;
   }
-  return { ok: true, data: null };
+  return { ok: true, data: { studentId: member.studentId, password } };
 }
 
 export async function updateMember(userId: string, memberId: string, raw: unknown): Promise<ActionResult> {
@@ -200,15 +205,22 @@ export async function removeMember(userId: string, memberId: string): Promise<Ac
   if (!window.ok) return window;
   const member = await prisma.teamMember.findFirst({ where: { id: memberId, team: { leaderId: userId } } });
   if (!member) return { ok: false, code: "not_found" };
-  if (member.isLeader) return { ok: false, code: "cannot_remove_leader" };
-  await prisma.teamMember.delete({ where: { id: member.id } });
+  if (member.isLeader || member.teamRole === "TEAM_LEADER") return { ok: false, code: "cannot_remove_leader" };
+  if (member.userId) await prisma.user.delete({ where: { id: member.userId } });
+  else await prisma.teamMember.delete({ where: { id: member.id } });
   return { ok: true, data: null };
 }
 
 async function ownSubmission(userId: string, stageKey: StageKey) {
-  const user = await leaderContext(userId);
-  const project = user?.ledTeam?.project;
-  if (!user?.ledTeam || !project) return null;
+  const team = await prisma.team.findFirst({
+    where: { OR: [{ leaderId: userId }, { members: { some: { userId } } }] },
+    include: {
+      members: { include: { faculty: true }, orderBy: { createdAt: "asc" } },
+      project: { include: { track: true, submissions: { include: { files: true, links: true } } } },
+    },
+  });
+  const project = team?.project;
+  if (!team || !project) return null;
   let submission = project.submissions.find((item) => item.stageKey === stageKey) ?? null;
   if (!submission && stageKey === "STAGE2") {
     const stage1 = await prisma.stageResult.findFirst({
@@ -222,7 +234,7 @@ async function ownSubmission(userId: string, stageKey: StageKey) {
       });
     }
   }
-  return { user, team: user.ledTeam, project, submission };
+  return { team, project, submission, leader: team.leaderId === userId };
 }
 
 async function writeGuard(stageKey: StageKey, status: "DRAFT" | "SUBMITTED" | "UPDATED" | "LOCKED", updateUsedAt: Date | null, intent: "save_draft" | "submit" | "update") {
@@ -255,6 +267,7 @@ function linkValue(links: { kind: LinkKind; url: string; isCurrent: boolean; pen
 export async function saveStage1(userId: string, raw: unknown, intent: "save_draft" | "submit" | "update"): Promise<ActionResult<{ eligible: boolean }>> {
   const owned = await ownSubmission(userId, "STAGE1");
   if (!owned?.submission) return { ok: false, code: "not_found" };
+  if ((intent === "submit" || intent === "update") && !owned.leader) return { ok: false, code: "leader_only" };
   const guard = await writeGuard("STAGE1", owned.submission.status, owned.submission.updateUsedAt, intent);
   if (!guard.ok) return guard;
   if (intent === "submit") {
@@ -309,6 +322,7 @@ function materialErrors(input: Stage2Input, files: { kind: FileKind; isCurrent: 
 export async function saveStage2(userId: string, raw: unknown, intent: "save_draft" | "submit" | "update"): Promise<ActionResult> {
   const owned = await ownSubmission(userId, "STAGE2");
   if (!owned?.submission) return { ok: false, code: "not_selected" };
+  if ((intent === "submit" || intent === "update") && !owned.leader) return { ok: false, code: "leader_only" };
   const guard = await writeGuard("STAGE2", owned.submission.status, owned.submission.updateUsedAt, intent);
   if (!guard.ok) return guard;
   if (intent === "submit") {

@@ -45,6 +45,7 @@ export default async function Stage2Page({ params }: { params: Promise<{ locale:
         locale={locale}
         mode={mode}
         files={(submission?.files ?? []).map((file) => ({ kind: file.kind, name: file.originalName }))}
+        canLead={team?.leaderId === user.id}
         initial={{
           softwareProject: asBool(payload.softwareProject),
           productUrl: asString(payload.productUrl),

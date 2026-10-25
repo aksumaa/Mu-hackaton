@@ -13,6 +13,11 @@ enum Role {
   ADMIN
 }
 
+enum TeamRole {
+  TEAM_LEADER
+  TEAM_MEMBER
+}
+
 enum VerificationStatus {
   PENDING
   VERIFIED
@@ -81,6 +86,7 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   ledTeam            Team?     @relation("TeamLeader")
+  membership         TeamMember? @relation("MemberAccount")
   assignments        JudgeAssignment[] @relation("JudgeAssignments")
   assignedBy         JudgeAssignment[] @relation("AssignedBy")
   notifications      Notification[]
@@ -138,6 +144,9 @@ model TeamMember {
   groupName          String
   verificationStatus VerificationStatus @default(PENDING)
   isLeader           Boolean            @default(false)
+  teamRole           TeamRole           @default(TEAM_MEMBER)
+  userId             String?            @unique
+  user               User?              @relation("MemberAccount", fields: [userId], references: [id], onDelete: Cascade)
   rejectionNote      String?
   createdAt          DateTime           @default(now())
 

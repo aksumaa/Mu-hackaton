@@ -14,6 +14,35 @@ import { clientIp, normalizeGroup } from "@/lib/utils";
 import { changePasswordSchema, loginSchema, registerSchema } from "@/lib/validation";
 import { checked, localeOf, rethrowRedirect, text, type ActionState } from "@/server/action-state";
 
+function safeNext(raw: string, locale: string, role: "PARTICIPANT" | "JUDGE" | "ADMIN") {
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\") || raw.includes("://") || raw.includes("?")) return null;
+  const prefix = `/${locale}`;
+  if (raw !== prefix && !raw.startsWith(`${prefix}/`)) return null;
+  const path = raw === prefix ? "/" : raw.slice(prefix.length);
+  const roots = role === "ADMIN" ? ["/admin"] : role === "JUDGE" ? ["/judge"] : ["/cabinet", "/change-password"];
+  if (!roots.some((root) => path === root || path.startsWith(`${root}/`))) return null;
+  return path;
+}
+
+async function establishSession(studentId: string, password: string, locale: string, href: string): Promise<ActionState> {
+  try {
+    const destination = await signIn("credentials", {
+      studentId,
+      password,
+      redirect: false,
+      redirectTo: `/${locale}${href}`,
+    });
+    if (typeof destination !== "string" || destination.includes("error=")) return { error: "invalid_credentials" };
+  } catch (error) {
+    rethrowRedirect(error);
+    if (error instanceof CredentialsSignin && error.code === "rate_limited") return { error: "rate_limited" };
+    if (error instanceof CredentialsSignin && error.code === "inactive") return { error: "inactive" };
+    return { error: "invalid_credentials" };
+  }
+  redirect({ href, locale });
+  return { error: "generic" };
+}
+
 async function verificationFor(studentId: string, facultyId: string, groupName: string) {
   const roster = await prisma.rosterEntry.findUnique({ where: { studentId } });
   if (!roster) return "PENDING" as const;
@@ -36,20 +65,9 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
     if (user && matches && !user.isActive) return { error: "inactive" };
     return { error: "invalid_credentials" };
   }
-  const nextPath = user.mustChangePassword ? "/change-password" : homeFor(user.role);
-  try {
-    await signIn("credentials", {
-      studentId: user.studentId,
-      password: parsed.data.password,
-      redirectTo: `/${locale}${nextPath}`,
-    });
-  } catch (error) {
-    rethrowRedirect(error);
-    if (error instanceof CredentialsSignin && error.code === "rate_limited") return { error: "rate_limited" };
-    if (error instanceof CredentialsSignin && error.code === "inactive") return { error: "inactive" };
-    return { error: "invalid_credentials" };
-  }
-  return { error: "generic" };
+  const requested = safeNext(text(formData, "next"), locale, user.role);
+  const nextPath = user.mustChangePassword ? "/change-password" : requested ?? homeFor(user.role);
+  return establishSession(user.studentId, parsed.data.password, locale, nextPath);
 }
 
 export async function registerAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
@@ -97,6 +115,7 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
       await tx.teamMember.create({
         data: {
           teamId: team.id,
+          userId: user.id,
           fullName: data.fullName,
           studentId: data.studentId,
           facultyId: data.facultyId,
@@ -104,6 +123,7 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
           groupName: data.groupName,
           verificationStatus: status,
           isLeader: true,
+          teamRole: "TEAM_LEADER",
         },
       });
     });
@@ -111,31 +131,13 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
       const existing = await prisma.user.findUnique({ where: { studentId: data.studentId } });
       if (existing && (await argon2.verify(existing.passwordHash, data.password).catch(() => false))) {
-        try {
-          await signIn("credentials", {
-            studentId: data.studentId,
-            password: data.password,
-            redirectTo: `/${locale}/cabinet`,
-          });
-        } catch (signInError) {
-          rethrowRedirect(signInError);
-        }
+        return establishSession(data.studentId, data.password, locale, "/cabinet");
       }
       return { error: "student_id_taken", field: "studentId" };
     }
     return { error: "generic" };
   }
-  try {
-    await signIn("credentials", {
-      studentId: data.studentId,
-      password: data.password,
-      redirectTo: `/${locale}/cabinet`,
-    });
-  } catch (error) {
-    rethrowRedirect(error);
-    return { error: "generic" };
-  }
-  return { error: "generic" };
+  return establishSession(data.studentId, data.password, locale, "/cabinet");
 }
 
 export async function changePasswordAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
