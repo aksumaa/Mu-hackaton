@@ -4,9 +4,8 @@ import { CHECKLIST_KEYS } from "@/lib/catalog";
 const studentId = z
   .string()
   .trim()
-  .min(4)
-  .max(32)
-  .regex(/^[A-Za-z0-9-]+$/);
+  .transform((value) => value.replace(/[\s\u200B-\u200D\uFEFF]/g, "").toUpperCase())
+  .pipe(z.string().min(4).max(32).regex(/^[A-Z0-9-]+$/));
 const personName = z.string().trim().min(3).max(120);
 const groupName = z.string().trim().min(2).max(32);
 const course = z.coerce.number().int().min(1).max(6);
@@ -20,7 +19,7 @@ export const registerSchema = z
     facultyId: z.string().min(1),
     course,
     groupName,
-    phone: optionalText(32),
+    phone: optionalText(64),
     telegram: optionalText(64),
     email: z.union([z.string().trim().email().max(160), z.literal("")]).optional(),
     password,

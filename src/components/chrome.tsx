@@ -51,7 +51,7 @@ export function HeaderBar({
         <Link href="/" className="flex min-w-0 items-center gap-2.5 font-semibold">
           <Logo className="h-10" />
           <span className="sr-only">MU Hackathon</span>
-          <span className="hidden min-w-0 leading-tight sm:block" aria-hidden="true">
+          <span className="hidden min-w-0 leading-tight md:block" aria-hidden="true">
             MU Hackathon
             <span className="block text-xs font-medium text-muted">Millat Umidi</span>
           </span>
@@ -71,8 +71,8 @@ export function HeaderBar({
             </Link>
           ))}
         </nav>
-        <div className="ml-auto flex items-center gap-1">
-          <div className="flex rounded-full border border-border p-0.5" role="group" aria-label={t("common.language")}>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <div className="hidden rounded-full border border-border p-0.5 sm:flex" role="group" aria-label={t("common.language")}>
             {locales.map((item) => (
               <Link
                 key={item.code}
@@ -116,34 +116,39 @@ export function HeaderBar({
       </div>
       {open ? (
         <div id="site-menu" className="border-t border-border bg-card xl:hidden">
-          <nav className="mx-auto grid max-w-6xl gap-1 px-4 py-3 sm:px-6" aria-label="Main">
-            {items.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={cn(
-                  "rounded-xl px-3 py-3 text-base font-medium",
-                  path === item.href && "bg-accent-soft font-semibold shadow-[inset_3px_0_0_0_var(--meter)]",
-                )}
-                aria-current={path === item.href ? "page" : undefined}
-              >
-                {item.label}
-              </Link>
-            ))}
+          <div className="mx-auto grid max-w-6xl gap-1 px-4 py-3 sm:px-6">
+            <div className="px-1 pb-2 sm:hidden">
+              <LocaleLinks locale={locale} />
+            </div>
+            <nav className="grid gap-1" aria-label="Main">
+              {items.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  className={cn(
+                    "flex min-h-12 items-center rounded-xl px-3 text-base font-medium",
+                    path === item.href && "bg-accent-soft font-semibold shadow-[inset_3px_0_0_0_var(--meter)]",
+                  )}
+                  aria-current={path === item.href ? "page" : undefined}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
             {accountHref && accountLabel ? (
-              <Link href={accountHref} onClick={() => setOpen(false)} className="rounded-xl px-3 py-3 font-semibold">
+              <Link href={accountHref} onClick={() => setOpen(false)} className="mt-1 inline-flex min-h-12 items-center justify-center rounded-full bg-accent px-4 font-semibold text-accent-foreground">
                 {accountLabel}
               </Link>
             ) : null}
             {authed ? (
               <form action={signOut}>
-                <button type="submit" className="w-full rounded-xl px-3 py-3 text-left font-semibold">
+                <button type="submit" className="flex min-h-12 w-full items-center rounded-xl px-3 text-left font-semibold">
                   {t("common.signOut")}
                 </button>
               </form>
             ) : null}
-          </nav>
+          </div>
         </div>
       ) : null}
     </header>
@@ -200,7 +205,7 @@ export function LocaleLinks({ locale }: { locale: string }) {
   );
 }
 
-export function Countdown({ iso, label }: { iso: string; label: string }) {
+export function Countdown({ iso, label, plain = false }: { iso: string; label: string; plain?: boolean }) {
   const t = useTranslations("hero");
   const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
@@ -216,16 +221,16 @@ export function Countdown({ iso, label }: { iso: string; label: string }) {
     [parts?.seconds ?? 0, t("seconds")],
   ] as const;
   return (
-    <div className="min-w-0 rounded-3xl border border-border bg-card p-4 sm:p-5">
-      <p className="text-sm font-semibold text-muted">{label}</p>
-      <p className="mt-1 text-sm">{parts?.done ? t("countdownDone") : t("countdown")}</p>
-      <div className="mt-4 grid grid-cols-4 gap-2">
+    <div className={plain ? "min-w-0" : "min-w-0 rounded-[1.5rem] border border-border bg-background/85 p-4 backdrop-blur-sm sm:p-5"}>
+      <p className={plain ? "text-xs font-bold uppercase tracking-[0.18em] text-muted" : "text-sm font-semibold text-muted"}>{label}</p>
+      {plain ? null : <p className="mt-1 text-sm">{parts?.done ? t("countdownDone") : t("countdown")}</p>}
+      <div className={plain ? "mt-3 grid grid-cols-4 gap-3 border-t border-foreground pt-3" : "mt-4 grid grid-cols-4 gap-2"}>
         {cells.map(([value, caption]) => (
-          <div key={caption} className="min-w-0 rounded-2xl bg-accent-soft px-1 py-3 text-center">
-            <div className="text-2xl font-semibold tabular-nums sm:text-3xl" suppressHydrationWarning>
+          <div key={caption} className={plain ? "min-w-0" : "min-w-0 rounded-2xl bg-accent-soft px-1 py-3 text-center"}>
+            <div className={plain ? "font-display text-3xl font-semibold tabular-nums leading-none sm:text-5xl" : "font-display text-3xl font-semibold tabular-nums leading-none sm:text-4xl"} suppressHydrationWarning>
               {parts ? String(value).padStart(2, "0") : "--"}
             </div>
-            <div className="mt-1 break-words text-[11px] font-medium uppercase tracking-wide text-muted">{caption}</div>
+            <div className="mt-2 break-words text-[11px] font-medium uppercase tracking-wide text-muted">{caption}</div>
           </div>
         ))}
       </div>

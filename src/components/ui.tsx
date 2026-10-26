@@ -30,7 +30,7 @@ export function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
     <input
       {...props}
       className={cn(
-        "min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base text-foreground",
+        "min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base text-foreground aria-invalid:border-danger",
         props.className,
       )}
     />
@@ -53,7 +53,7 @@ export function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>
   return (
     <select
       {...props}
-      className={cn("min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base", props.className)}
+      className={cn("min-h-11 w-full min-w-0 rounded-xl border border-border bg-card px-3 text-base aria-invalid:border-danger", props.className)}
     />
   );
 }

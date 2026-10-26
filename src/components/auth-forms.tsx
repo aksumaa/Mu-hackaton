@@ -1,7 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
-import { useActionState, useState } from "react";
+import { useActionState, useState, type ChangeEvent } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { changePasswordAction, loginAction, registerAction, requestResetAction, resetWithTokenAction } from "@/server/auth-actions";
@@ -90,19 +90,49 @@ export function RegisterForm({
 }) {
   const t = useTranslations("auth");
   const common = useTranslations("common");
+  const errors = useTranslations("errors");
   const [state, action, pending] = useActionState(registerAction, null);
+  const [form, setForm] = useState({
+    fullName: "",
+    studentId: "",
+    facultyId: faculties[0]?.id ?? "",
+    course: "1",
+    groupName: "",
+    phone: "",
+    telegram: "",
+    email: "",
+    acceptRules: false,
+  });
+  const problem = (name: string) => (state?.field === name && state.error ? errors(state.error as "generic") : undefined);
+  const set = (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  };
   return (
     <form action={action} className="grid gap-4">
       <input type="hidden" name="locale" value={locale} />
       <FormMessage state={state} />
-      <Field id="fullName" label={t("fullName")}>
-        <TextInput id="fullName" name="fullName" autoComplete="name" required minLength={3} />
+      <Field id="fullName" label={t("fullName")} error={problem("fullName")}>
+        <TextInput id="fullName" name="fullName" autoComplete="name" required minLength={3} maxLength={120} value={form.fullName} onChange={set} aria-invalid={problem("fullName") ? true : undefined} />
       </Field>
-      <Field id="studentId" label={t("id")} hint={t("idHint")}>
-        <TextInput id="studentId" name="studentId" autoComplete="username" required minLength={4} />
+      <Field id="studentId" label={t("id")} hint={t("idHint")} error={problem("studentId")}>
+        <TextInput
+          id="studentId"
+          name="studentId"
+          autoComplete="username"
+          required
+          minLength={4}
+          maxLength={40}
+          pattern={"[A-Za-z0-9\\- ]{4,40}"}
+          title={t("idHint")}
+          spellCheck={false}
+          value={form.studentId}
+          onChange={set}
+          aria-invalid={problem("studentId") ? true : undefined}
+        />
       </Field>
-      <Field id="facultyId" label={t("faculty")}>
-        <SelectInput id="facultyId" name="facultyId" required defaultValue={faculties[0]?.id ?? ""}>
+      <Field id="facultyId" label={t("faculty")} error={problem("facultyId")}>
+        <SelectInput id="facultyId" name="facultyId" required value={form.facultyId} onChange={set} aria-invalid={problem("facultyId") ? true : undefined}>
           {faculties.map((faculty) => (
             <option key={faculty.id} value={faculty.id}>
               {faculty.name}
@@ -111,8 +141,8 @@ export function RegisterForm({
         </SelectInput>
       </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="course" label={t("course")}>
-          <SelectInput id="course" name="course" required defaultValue="1">
+        <Field id="course" label={t("course")} error={problem("course")}>
+          <SelectInput id="course" name="course" required value={form.course} onChange={set} aria-invalid={problem("course") ? true : undefined}>
             {[1, 2, 3, 4, 5, 6].map((course) => (
               <option key={course} value={course}>
                 {course}
@@ -120,31 +150,43 @@ export function RegisterForm({
             ))}
           </SelectInput>
         </Field>
-        <Field id="groupName" label={t("group")} hint={t("groupHint")}>
-          <TextInput id="groupName" name="groupName" required minLength={2} />
+        <Field id="groupName" label={t("group")} hint={t("groupHint")} error={problem("groupName")}>
+          <TextInput id="groupName" name="groupName" required minLength={2} maxLength={32} value={form.groupName} onChange={set} aria-invalid={problem("groupName") ? true : undefined} />
         </Field>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="phone" label={`${t("phone")} · ${common("optional")}`}>
-          <TextInput id="phone" name="phone" autoComplete="tel" inputMode="tel" />
+        <Field id="phone" label={`${t("phone")} · ${common("optional")}`} error={problem("phone")}>
+          <TextInput id="phone" name="phone" autoComplete="tel" inputMode="tel" maxLength={64} value={form.phone} onChange={set} aria-invalid={problem("phone") ? true : undefined} />
         </Field>
-        <Field id="telegram" label={`${t("telegram")} · ${common("optional")}`}>
-          <TextInput id="telegram" name="telegram" autoComplete="username" />
+        <Field id="telegram" label={`${t("telegram")} · ${common("optional")}`} error={problem("telegram")}>
+          <TextInput id="telegram" name="telegram" autoComplete="off" maxLength={64} value={form.telegram} onChange={set} aria-invalid={problem("telegram") ? true : undefined} />
         </Field>
       </div>
-      <Field id="email" label={`${t("email")} · ${common("optional")}`}>
-        <TextInput id="email" name="email" type="email" autoComplete="email" />
+      <Field id="email" label={`${t("email")} · ${common("optional")}`} error={problem("email")}>
+        <TextInput id="email" name="email" type="email" autoComplete="email" maxLength={160} value={form.email} onChange={set} aria-invalid={problem("email") ? true : undefined} />
       </Field>
-      <PasswordField id="password" name="password" label={t("password")} autoComplete="new-password" strength />
-      <label className="flex items-start gap-3 text-sm leading-6">
-        <input id="acceptRules" name="acceptRules" type="checkbox" required className="mt-1 h-5 w-5" />
-        <span>
-          {t("accept")}{" "}
-          <Link href="/regulation" className="font-semibold underline">
-            {t("rulesLink")}
-          </Link>
-        </span>
-      </label>
+      <PasswordField id="password" name="password" label={t("password")} autoComplete="new-password" strength error={problem("password")} />
+      <div className="grid gap-1.5">
+        <label className="flex items-start gap-3 text-sm leading-6">
+          <input
+            id="acceptRules"
+            name="acceptRules"
+            type="checkbox"
+            required
+            checked={form.acceptRules}
+            onChange={(event) => setForm((current) => ({ ...current, acceptRules: event.target.checked }))}
+            aria-invalid={problem("acceptRules") ? true : undefined}
+            className="mt-1 h-5 w-5"
+          />
+          <span>
+            {t("accept")}{" "}
+            <Link href="/regulation" className="font-semibold underline">
+              {t("rulesLink")}
+            </Link>
+          </span>
+        </label>
+        {problem("acceptRules") ? <p role="alert" className="text-sm font-medium text-danger">{problem("acceptRules")}</p> : null}
+      </div>
       <Button type="submit" disabled={pending || faculties.length === 0} aria-busy={pending}>
         {pending ? common("submitting") : t("create")}
       </Button>

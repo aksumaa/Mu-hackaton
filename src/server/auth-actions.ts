@@ -86,13 +86,33 @@ export async function registerAction(_prev: ActionState, formData: FormData): Pr
   });
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
+    const field = String(issue?.path[0] ?? "fullName");
     if (issue?.message === "phone_or_telegram") return { error: "phone_or_telegram", field: "phone" };
-    if (issue?.path[0] === "acceptRules") return { error: "accept_rules", field: "acceptRules" };
-    return { error: "invalid_field", field: String(issue?.path[0] ?? "fullName") };
+    if (field === "acceptRules") return { error: "accept_rules", field: "acceptRules" };
+    const codes: Record<string, string> = {
+      studentId: "invalid_student_id",
+      email: "invalid_email",
+      password: "invalid_password",
+      fullName: "invalid_name",
+      groupName: "invalid_group",
+      phone: "invalid_phone",
+      telegram: "invalid_telegram",
+      facultyId: "invalid_faculty",
+      course: "invalid_course",
+    };
+    return { error: codes[field] ?? "invalid_field", field };
   }
   const limit = rateLimit(`register:${clientIp(await headers())}`);
   if (!limit.ok) return { error: "rate_limited" };
   const data = parsed.data;
+  const existing = await prisma.user.findFirst({ where: { studentId: { equals: data.studentId, mode: "insensitive" } } });
+  if (existing) {
+    const matches = await argon2.verify(existing.passwordHash, data.password).catch(() => false);
+    if (matches) return establishSession(existing.studentId, data.password, locale, "/cabinet");
+    return { error: "student_id_taken", field: "studentId" };
+  }
+  const memberTaken = await prisma.teamMember.findFirst({ where: { studentId: { equals: data.studentId, mode: "insensitive" } } });
+  if (memberTaken) return { error: "student_id_taken", field: "studentId" };
   const status = await verificationFor(data.studentId, data.facultyId, data.groupName);
   try {
     await prisma.$transaction(async (tx) => {

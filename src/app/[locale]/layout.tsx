@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Inter, Source_Serif_4 } from "next/font/google";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { getMessages, getTranslations, setRequestLocale } from "next-intl/server";
@@ -19,6 +19,12 @@ import "../globals.css";
 const inter = Inter({
   subsets: ["latin", "latin-ext", "cyrillic"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+const display = Source_Serif_4({
+  subsets: ["latin", "latin-ext", "cyrillic"],
+  variable: "--font-source-serif",
   display: "swap",
 });
 
@@ -81,7 +87,7 @@ export default async function LocaleLayout({
     : t("nav.register");
 
   return (
-    <html lang={locale} className={inter.variable} suppressHydrationWarning>
+    <html lang={locale} className={`${inter.variable} ${display.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <Providers locale={locale} messages={messages}>
           <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-accent focus:px-4 focus:py-2 focus:text-accent-foreground">
@@ -98,31 +104,32 @@ export default async function LocaleLayout({
           <main id="main" className="mx-auto w-full min-w-0 max-w-6xl px-4 py-8 sm:px-6 sm:py-12">
             {children}
           </main>
-          <footer className="border-t border-border">
-            <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[1.4fr_1fr_1fr]">
+          <footer className="mt-4 border-t border-border">
+            <div className="h-1 bg-gradient-to-r from-brand-800 via-brand to-brand-200" />
+            <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-[1.4fr_0.8fr_1fr]">
               <div>
                 <Link href="/" className="inline-flex items-center gap-3">
                   <Logo className="h-12" />
-                  <span className="text-lg font-semibold">MU Hackathon</span>
+                  <span className="font-display text-xl font-semibold">MU Hackathon</span>
                 </Link>
                 <p className="mt-3 max-w-sm text-sm leading-6 text-muted">{t("footer.note")}</p>
               </div>
-              <div className="grid gap-2 text-sm">
-                <Link href="/regulation" className="underline-offset-4 hover:underline">{t("nav.rules")}</Link>
-                <Link href="/timeline" className="underline-offset-4 hover:underline">{t("nav.timeline")}</Link>
-                <Link href="/criteria" className="underline-offset-4 hover:underline">{t("nav.criteria")}</Link>
+              <div className="grid content-start gap-1 text-sm">
+                <Link href="/regulation" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{t("nav.rules")}</Link>
+                <Link href="/timeline" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{t("nav.timeline")}</Link>
+                <Link href="/criteria" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{t("nav.criteria")}</Link>
+                <Link href="/faq" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{t("nav.faq")}</Link>
               </div>
-              <div className="grid content-start gap-2 text-sm">
-                {CONTACTS.address ? <p>{CONTACTS.address}</p> : null}
-                {CONTACTS.phone ? <a className="underline-offset-4 hover:underline" href={`tel:${CONTACTS.phone.replace(/\s/g, "")}`}>{CONTACTS.phone}</a> : null}
-                {CONTACTS.email ? <a className="underline-offset-4 hover:underline" href={`mailto:${CONTACTS.email}`}>{CONTACTS.email}</a> : null}
-                {SOCIALS.website ? <a className="underline-offset-4 hover:underline" href={SOCIALS.website}>{t("footer.website")}</a> : null}
-                {SOCIALS.telegram ? <a className="underline-offset-4 hover:underline" href={SOCIALS.telegram}>{t("footer.telegram")}</a> : null}
-                {SOCIALS.instagram ? <a className="underline-offset-4 hover:underline" href={SOCIALS.instagram}>{t("footer.instagram")}</a> : null}
-                <Link href="/contacts" className="underline-offset-4 hover:underline">{t("nav.contact")}</Link>
-                <Link href="/faq" className="underline-offset-4 hover:underline">{t("nav.faq")}</Link>
+              <div className="grid content-start gap-1 text-sm">
+                {CONTACTS.address ? <p className="mb-2 leading-6">{CONTACTS.address}</p> : null}
+                {CONTACTS.phone ? <a className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={`tel:${CONTACTS.phone.replace(/\s/g, "")}`}>{CONTACTS.phone}</a> : null}
+                {CONTACTS.email ? <a className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={`mailto:${CONTACTS.email}`}>{CONTACTS.email}</a> : null}
+                {SOCIALS.website ? <a className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={SOCIALS.website}>{t("footer.website")}</a> : null}
+                {SOCIALS.telegram ? <a className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={SOCIALS.telegram}>{t("footer.telegram")}</a> : null}
+                {SOCIALS.instagram ? <a className="inline-flex min-h-11 items-center underline-offset-4 hover:underline" href={SOCIALS.instagram}>{t("footer.instagram")}</a> : null}
+                <Link href="/contacts" className="inline-flex min-h-11 items-center underline-offset-4 hover:underline">{t("nav.contact")}</Link>
                 <LocaleLinks locale={locale} />
-                <p className="text-muted">{t("footer.rights")}</p>
+                <p className="mt-2 text-muted">{t("footer.rights")}</p>
               </div>
             </div>
           </footer>
